@@ -1,13 +1,16 @@
-const mongoose = require("mongoose");
+// models/Progress.js
+import mongoose from "mongoose/lib/index.js";
 
 const ProgressSchema = new mongoose.Schema({
-  userId: { type: String, required: true }, // E.g., 'my_sync_id'
-  date: { type: String, required: true }, // E.g., '2026-07-14'
-  tasks: { type: Map, of: Boolean, default: {} }, // Checkbox states
+  userId: { type: String, required: true },
+  date: { type: String, required: true },
+  tasks: { type: Map, of: Boolean, default: {} },
   percentage: { type: Number, default: 0 },
 });
 
-// Compound index so a user only has one record per day
 ProgressSchema.index({ userId: 1, date: 1 }, { unique: true });
 
-module.exports = mongoose.model("Progress", ProgressSchema);
+const Progress =
+  mongoose.models.Progress || mongoose.model("Progress", ProgressSchema);
+
+export default Progress;

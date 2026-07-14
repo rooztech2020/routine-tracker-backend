@@ -1,37 +1,55 @@
-// server.js (Cloudflare-safe)
+// server.js (Cloudflare Global-Scope Safe)
 import express from "express";
-// Crucial fix: Import directly from the lib entry point to prevent Mongoose from loading browser polyfills
-import mongoose from "mongoose/lib/index.js";
 import cors from "cors";
 import { httpServerHandler } from "cloudflare:node";
-import Progress from "./models/Progress.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Create a database connection helper that only runs when a request comes in
+// These are declared globally but will remain uninitialized until the first request hits!
+let mongoose;
+let Progress;
 let isConnected = false;
-const connectDB = async () => {
+
+const initAndConnectDB = async () => {
   if (isConnected) return;
+
   try {
-    console.log("Connecting to MongoDB...");
+    // Dynamic Imports: By moving imports inside this function, Cloudflare compiles
+    // MongoDB and Mongoose only inside the request handler context!
+    if (!mongoose) {
+      const mongooseModule = await import("mongoose/lib/index.js");
+      mongoose = mongooseModule.default;
+    }
+
+    if (!Progress) {
+      const progressModule = await import("./models/Progress.js");
+      Progress = progressModule.default;
+    }
+
+    console.log("Connecting to MongoDB Atlas...");
     await mongoose.connect(process.env.MONGO_URI);
     isConnected = true;
-    console.log("SUCCESS: Connected to MongoDB");
+    console.log("SUCCESS: Securely connected to MongoDB");
   } catch (err) {
-    console.error("ERROR: Failed to connect to MongoDB:", err.message);
+    console.error(
+      "ERROR: Failed to establish database connection:",
+      err.message,
+    );
     throw err;
   }
 };
 
-// Middleware to ensure DB connection exists before executing any route
+// Middleware: Automatically init modules & establish DB connection before each route runs
 app.use(async (req, res, next) => {
   try {
-    await connectDB();
+    await initAndConnectDB();
     next();
   } catch (err) {
-    res.status(500).json({ error: "Database connection failed" });
+    res
+      .status(500)
+      .json({ error: "Database connection or initialization failed" });
   }
 });
 
@@ -62,5 +80,4 @@ app.post("/api/progress/:userId", async (req, res) => {
   }
 });
 
-// Export the cloudflare handler
 export default httpServerHandler(app);
